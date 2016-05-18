@@ -16,11 +16,11 @@ describe Api::UsersController do
   describe 'index' do
     let(:make_request) { get :index, params }
 
-    context 'v0' do
-      let(:version) { 0 }
+    context 'v2015' do
+      let(:version) { 2015 }
 
-      specify { expect(response_body).to match_hash({ 'users' => [] }) }
-      specify { expect(metadata).to match_hash({ 'api_version' => 0 }) }
+      specify { expect(response_body).to match_hash({ 'users' => {} }) }
+      specify { expect(metadata).to match_hash({ 'api_version' => 201405 }) }
     end
 
     context 'v2016' do

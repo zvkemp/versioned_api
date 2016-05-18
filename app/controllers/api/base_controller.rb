@@ -10,8 +10,10 @@ class Api::BaseController < ApplicationController
 
   def establish_api
     api_class.version(api_version).tap do |version|
-      @api = version[:delegate].new(self)
+      @api = version[:delegate].new(self, **version)
       @api_version = version[:version]
     end
+  rescue => e
+    render json: { error: e.message }, status: 500 and return false
   end
 end

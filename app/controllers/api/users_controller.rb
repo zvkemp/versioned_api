@@ -24,20 +24,22 @@ module Api
     class << self
       def version(requested_version)
         brv = BigDecimal.new("0.#{requested_version}")
-        versions.detect {|version:, **| brv >= version }
+        versions.detect(-> { raise "Unsupported API version #{requested_version}" }) do |version:, legacy:, **|
+          !legacy && brv >= version
+        end
       end
 
       def versions
-        @versions ||= [ new_version(0, Base) ]
+        @versions ||= [ new_version(0, parent_class: Base, legacy: true) ]
       end
 
-      def define_version(version_number, &block)
-        versions.unshift(new_version(version_number, &block))
+      def define_version(version_number, options = {}, &block)
+        versions.unshift(new_version(version_number, **options, &block))
       end
 
       private
 
-      def new_version(version_number, parent_class = nil, &block)
+      def new_version(version_number, deprecated: false, legacy: false, parent_class: nil, &block)
         bvd = BigDecimal.new("0.#{version_number}")
         parent_class ||= versions.detect(-> { raise ArgumentError }) { |version:, **| bvd > version }[:delegate]
 
@@ -47,22 +49,20 @@ module Api
           const_set("V#{version_number}", klass)
         end
 
-        { version: bvd, delegate: new_class }
+        { version: bvd, delegate: new_class, deprecated: deprecated, legacy: legacy }
       end
     end
 
     class Base
-      attr_reader :controller
+      attr_reader :controller, :deprecated
 
-      def initialize(controller)
+      def initialize(controller, deprecated: false, **)
         @controller = controller
+        @deprecated = deprecated
       end
 
       def index
-        {
-          users: users,
-          metadata: metadata
-        }
+        { users: users, metadata: metadata }
       end
 
       def show
@@ -79,21 +79,26 @@ module Api
         {
           requested_version: controller.instance_variable_get(:@requested_version),
           api_version: api_version
-        }
+        }.merge(deprecation_notice)
       end
 
       def serialize(user)
-        user.attributes.slice(*%w(id name email))
+        user.attributes.slice(*%w(id name email occupation))
       end
 
       def params
         controller.params
       end
+
+      def deprecation_notice
+        return {} unless deprecated
+        { deprecation_warning: "#{self.class} api_version is deprecated." }
+      end
     end
   end
 end
 
-Api::UserAPI.define_version(201405) do
+Api::UserAPI.define_version(201405, deprecated: true) do
   private
 
   def users
@@ -119,7 +124,7 @@ Api::UserAPI.define_version(201602) do
   end
 
   def serialize(user)
-    { id: user.id, attributes: user.attributes }
+    { id: user.id, attributes: super }
   end
 end
 
