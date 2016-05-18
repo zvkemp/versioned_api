@@ -19,79 +19,79 @@ class Api::UsersController < Api::BaseController
   end
 end
 
-module Api::UserAPI
-  class Base
-    attr_reader :controller
+module Api
+  module UserAPI
+    class << self
+      def version(requested_version)
+        brv = BigDecimal.new("0.#{requested_version}")
+        versions.detect {|version:, **| brv >= version }
+      end
 
-    def initialize(controller)
-      @controller = controller
-    end
+      def versions
+        @versions ||= [ new_version(0, Base) ]
+      end
 
-    def index
-      {
-        users: users,
-        metadata: metadata
-      }
-    end
+      def define_version(version_number, &block)
+        versions.unshift(new_version(version_number, &block))
+      end
 
-    def show
-      serialize User.find(params[:id])
-    end
+      private
 
-    def api_version
-      0
-    end
+      def new_version(version_number, parent_class = nil, &block)
+        bvd = BigDecimal.new("0.#{version_number}")
+        parent_class ||= versions.detect(-> { raise ArgumentError }) { |version:, **| bvd > version }[:delegate]
 
-    private
-
-    def users
-      User.all.map(&method(:serialize))
-    end
-
-    def metadata
-      {
-        requested_version: controller.instance_variable_get(:@requested_version),
-        api_version: api_version
-      }
-    end
-
-    def serialize(user)
-      user.attributes.slice(*%w(id name email))
-    end
-
-    def params
-      controller.params
-    end
-  end
-
-  def self.version(requested_version)
-    brv = BigDecimal.new("0.#{requested_version}")
-    versions.detect {|version:, **| brv >= version }
-  end
-
-  class << self
-    def versions
-      @versions ||= [ { version: 0, delegate: Base } ]
-    end
-
-    def define_version(new_version, &block)
-      base_version = versions.detect(-> { raise ArgumentError }) { |version:, **| new_version > version }
-      versions.unshift({
-        version: BigDecimal.new("0.#{new_version}"),
-        delegate: Class.new(base_version[:delegate]).tap do |klass|
-
-          klass.class_eval do
-            define_method(:api_version) { new_version }
-          end
-
-          klass.class_eval(&block)
-          const_set("V#{new_version}", klass)
+        new_class = Class.new(parent_class).tap do |klass|
+          klass.class_eval { define_method(:api_version) { version_number } }
+          klass.class_eval(&block) if block
+          const_set("V#{version_number}", klass)
         end
-      })
+
+        { version: bvd, delegate: new_class }
+      end
+    end
+
+    class Base
+      attr_reader :controller
+
+      def initialize(controller)
+        @controller = controller
+      end
+
+      def index
+        {
+          users: users,
+          metadata: metadata
+        }
+      end
+
+      def show
+        serialize User.find(params[:id])
+      end
+
+      private
+
+      def users
+        User.all.map(&method(:serialize))
+      end
+
+      def metadata
+        {
+          requested_version: controller.instance_variable_get(:@requested_version),
+          api_version: api_version
+        }
+      end
+
+      def serialize(user)
+        user.attributes.slice(*%w(id name email))
+      end
+
+      def params
+        controller.params
+      end
     end
   end
 end
-
 
 Api::UserAPI.define_version(201405) do
   private
