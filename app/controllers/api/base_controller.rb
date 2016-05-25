@@ -2,7 +2,7 @@ class Api::BaseController < ApplicationController
   respond_to :json
 
   def perform
-    render json: api_object
+    render api_object.as_render_args
   end
 
   private
